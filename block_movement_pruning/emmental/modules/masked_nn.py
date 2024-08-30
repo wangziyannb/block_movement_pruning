@@ -45,7 +45,7 @@ class StaticIndexDim1(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        reverse_index, = ctx.saved_tensors
+        (reverse_index,) = ctx.saved_tensors
         return grad_output[:, reverse_index], None, None
 
 
@@ -57,7 +57,7 @@ class Index0(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        reverse_index, = ctx.saved_tensors
+        (reverse_index,) = ctx.saved_tensors
         return grad_output[reverse_index, :], None, None
 
 
@@ -73,8 +73,11 @@ def ampere_pattern(device=None):
     sparse_patterns = torch.Tensor(list(set(permutations(patterns.tolist()))))
     return sparse_patterns
 
+
 class DimensionShuffler(nn.Module):
-    def __init__(self, in_features, out_features, in_features_group = 4, out_features_group = 4):
+    def __init__(
+        self, in_features, out_features, in_features_group=4, out_features_group=4
+    ):
         super().__init__()
         self.in_features = in_features
         self.in_features_group = in_features_group
@@ -89,23 +92,27 @@ class DimensionShuffler(nn.Module):
         self.register_buffer("out_mapping", out_mapping)
         self.register_buffer("out_mapping_reverse", out_mapping_reverse)
 
-        #in_permutations = self.all_permutations(in_features_group)[2]
-        #self.register_buffer("in_permutations", in_permutations)
+        # in_permutations = self.all_permutations(in_features_group)[2]
+        # self.register_buffer("in_permutations", in_permutations)
 
-        #out_permutations = self.all_permutations(out_features_group)[2]
-        #self.register_buffer("out_permutations", out_permutations)
+        # out_permutations = self.all_permutations(out_features_group)[2]
+        # self.register_buffer("out_permutations", out_permutations)
 
-        in_permutation_scores = torch.randn(in_features // in_features_group, in_features_group - 1)
-        out_permutation_scores = torch.randn(out_features // out_features_group, out_features_group - 1)
+        in_permutation_scores = torch.randn(
+            in_features // in_features_group, in_features_group - 1
+        )
+        out_permutation_scores = torch.randn(
+            out_features // out_features_group, out_features_group - 1
+        )
 
-#        self.register_buffer("in_permutation_scores", in_permutation_scores)
-#        self.register_buffer("out_permutation_scores", out_permutation_scores)
+        #        self.register_buffer("in_permutation_scores", in_permutation_scores)
+        #        self.register_buffer("out_permutation_scores", out_permutation_scores)
         self.in_permutation_scores = nn.Parameter(in_permutation_scores)
         self.out_permutation_scores = nn.Parameter(out_permutation_scores)
 
     @staticmethod
     def rotate_matrices(angles):
-        assert(angles.shape[-1] == 1)
+        assert angles.shape[-1] == 1
         c = angles.cos()
         s = angles.sin()
 
@@ -115,29 +122,33 @@ class DimensionShuffler(nn.Module):
         return rot, rot.transpose(1, 2)
 
     def forward(self, input, weight, mask, temperature):
-        in_permutations, in_permutations_inverse = self.rotate_matrices(self.in_permutation_scores)
-        out_permutations, out_permutations_inverse = self.rotate_matrices(self.out_permutation_scores)
-        #in_permutations = self.permutation_mix(self.in_permutation_scores, self.in_permutations, temperature, self.training)
-        #out_permutations = self.permutation_mix(self.out_permutation_scores, self.out_permutations, temperature, self.training)
+        in_permutations, in_permutations_inverse = self.rotate_matrices(
+            self.in_permutation_scores
+        )
+        out_permutations, out_permutations_inverse = self.rotate_matrices(
+            self.out_permutation_scores
+        )
+        # in_permutations = self.permutation_mix(self.in_permutation_scores, self.in_permutations, temperature, self.training)
+        # out_permutations = self.permutation_mix(self.out_permutation_scores, self.out_permutations, temperature, self.training)
 
-        return self.permutated_linear(input,
-                                      self.in_mapping,
-                                      in_permutations,
-                                      in_permutations_inverse,
-                                      weight,
-                                      mask,
-                                      self.out_mapping,
-                                      self.out_mapping_reverse,
-                                      out_permutations,
-                                      out_permutations_inverse
-                                      )
+        return self.permutated_linear(
+            input,
+            self.in_mapping,
+            in_permutations,
+            in_permutations_inverse,
+            weight,
+            mask,
+            self.out_mapping,
+            self.out_mapping_reverse,
+            out_permutations,
+            out_permutations_inverse,
+        )
 
     @staticmethod
-    def permutation_mix(permutation_scores,
-                        permutations,
-                        temperature: float,
-                        training: bool):
-        if training: # True
+    def permutation_mix(
+        permutation_scores, permutations, temperature: float, training: bool
+    ):
+        if training:  # True
             s = F.softmax(permutation_scores * temperature, dim=-1)
         else:
             s = torch.argmax(permutation_scores, dim=-1)
@@ -183,46 +194,65 @@ class DimensionShuffler(nn.Module):
     def sequence_batch_group_permutation(s, mapping, permutations, final=False):
         d_group = permutations.shape[-1]
         d = s.shape[-1]
-        assert ((d % d_group) == 0)
-        assert (len(s.shape) == 3)
+        assert (d % d_group) == 0
+        assert len(s.shape) == 3
         s_shape = s.shape
         if not final:
             s = s[:, :, mapping]
         s = s.reshape(s.shape[:-1] + (s.shape[-1] // d_group, d_group))
-        s2 = torch.einsum('ijmk,mkn->ijmn', s, permutations)
+        s2 = torch.einsum("ijmk,mkn->ijmn", s, permutations)
         s2 = s2.reshape(s_shape)
         if final:
             s2 = s2[:, :, mapping]
         return s2
 
     @staticmethod
-    def matrix_group_permutation_inverse(matrix, mapping, permutations, permutations_inverse, transposed=False):
+    def matrix_group_permutation_inverse(
+        matrix, mapping, permutations, permutations_inverse, transposed=False
+    ):
         d_group = permutations.shape[-1]
         d = matrix.shape[-1]
-        assert ((d % d_group) == 0)
-        assert (len(matrix.shape) == 2)
+        assert (d % d_group) == 0
+        assert len(matrix.shape) == 2
         matrix_shape = matrix.shape
         matrix = matrix[:, mapping]
         matrix = matrix.reshape(matrix.shape[0], matrix.shape[1] // d_group, d_group)
         permutations_m = permutations_inverse
         # mnk because matrix is transposed, we should transpose permutations_m too
         perm_selector = "mkn" if transposed else "mnk"
-        matrix2 = torch.einsum(f'imk,{perm_selector}->imn', matrix, permutations_m)
+        matrix2 = torch.einsum(f"imk,{perm_selector}->imn", matrix, permutations_m)
         matrix2 = matrix2.reshape(matrix_shape)
         return matrix2
 
     @staticmethod
-    def permutated_linear(s, in_map, in_permut, in_permut_inverse, matrix, mask, out_map, out_map_inverse, out_permut, out_permut_inverse):
+    def permutated_linear(
+        s,
+        in_map,
+        in_permut,
+        in_permut_inverse,
+        matrix,
+        mask,
+        out_map,
+        out_map_inverse,
+        out_permut,
+        out_permut_inverse,
+    ):
         s_in = DimensionShuffler.sequence_batch_group_permutation(s, in_map, in_permut)
-        matrix2 = DimensionShuffler.matrix_group_permutation_inverse(matrix, in_map, in_permut, in_permut_inverse)
-        matrix3 = DimensionShuffler.matrix_group_permutation_inverse(matrix2.t(), out_map, out_permut, out_permut_inverse, transposed=True)
+        matrix2 = DimensionShuffler.matrix_group_permutation_inverse(
+            matrix, in_map, in_permut, in_permut_inverse
+        )
+        matrix3 = DimensionShuffler.matrix_group_permutation_inverse(
+            matrix2.t(), out_map, out_permut, out_permut_inverse, transposed=True
+        )
         matrix3 = matrix3 * mask.t()
         s_inner = s_in.matmul(matrix3)
-        s_out = DimensionShuffler.sequence_batch_group_permutation(s_inner, out_map_inverse, out_permut, final=True)
+        s_out = DimensionShuffler.sequence_batch_group_permutation(
+            s_inner, out_map_inverse, out_permut, final=True
+        )
 
         return s_out
 
-        s_ref = s.matmul(matrix.t()) # REFERENCE
+        s_ref = s.matmul(matrix.t())  # REFERENCE
 
         max_std = (s_out - s_ref).std().item()
         max_diff = (s_out - s_ref).abs().max().item()
@@ -233,7 +263,9 @@ class DimensionShuffler(nn.Module):
 
 
 class MaskDimensionShuffler(nn.Module):
-    def __init__(self, in_features, out_features, in_features_group=4, out_features_group=4):
+    def __init__(
+        self, in_features, out_features, in_features_group=4, out_features_group=4
+    ):
         super().__init__()
         self.in_features = in_features
         self.in_features_group = in_features_group
@@ -254,10 +286,12 @@ class MaskDimensionShuffler(nn.Module):
             score_dim = 1
         else:
             # Currently not supported
-            assert (False)
+            assert False
 
         in_permutation_scores = torch.randn(in_features // in_features_group, score_dim)
-        out_permutation_scores = torch.randn(out_features // out_features_group, score_dim)
+        out_permutation_scores = torch.randn(
+            out_features // out_features_group, score_dim
+        )
 
         self.in_permutation_scores = nn.Parameter(in_permutation_scores)
         self.out_permutation_scores = nn.Parameter(out_permutation_scores)
@@ -302,7 +336,7 @@ class MaskDimensionShuffler(nn.Module):
         if angles.shape[-1] == 1:
             return MaskDimensionShuffler.rotations_2d(angles.squeeze(-1))
         else:
-            assert(False)
+            assert False
 
     @staticmethod
     def rotate(mask, mapping, mapping_reverse, scores, temperature, training):
@@ -354,9 +388,23 @@ class MaskDimensionShuffler(nn.Module):
 
     def forward(self, mask, temperature):
         training = self.training
-        mask = self.rotate(mask, self.in_mapping, self.in_mapping_reverse, self.in_permutation_scores, temperature, training)
+        mask = self.rotate(
+            mask,
+            self.in_mapping,
+            self.in_mapping_reverse,
+            self.in_permutation_scores,
+            temperature,
+            training,
+        )
         mask = mask.t()
-        mask = self.rotate(mask, self.out_mapping, self.out_mapping_reverse, self.out_permutation_scores, temperature, training)
+        mask = self.rotate(
+            mask,
+            self.out_mapping,
+            self.out_mapping_reverse,
+            self.out_permutation_scores,
+            temperature,
+            training,
+        )
         mask = mask.t()
         return mask
 
@@ -375,14 +423,14 @@ class MaskedLinear(nn.Linear):
         mask_init: str = "constant",
         mask_scale: float = 0.0,
         pruning_method: str = "topK",
-        mask_block_rows:int = 1,
-        mask_block_cols:int = 1,
+        mask_block_rows: int = 1,
+        mask_block_cols: int = 1,
         ampere_pruning_method: str = "disabled",
         ampere_mask_init: str = "constant",
         ampere_mask_scale: float = 0.0,
-        shuffling_method:str = "disabled",
-        in_shuffling_group:int = 4,
-        out_shuffling_group:int = 4,
+        shuffling_method: str = "disabled",
+        in_shuffling_group: int = 4,
+        out_shuffling_group: int = 4,
     ):
         """
         Args:
@@ -406,18 +454,28 @@ class MaskedLinear(nn.Linear):
                 Default: ``topK``
         """
         super().__init__(in_features=in_features, out_features=out_features, bias=bias)
-        assert pruning_method in ["topK", "threshold", "sigmoied_threshold", "magnitude", "l0"]
+        assert pruning_method in [
+            "topK",
+            "threshold",
+            "sigmoied_threshold",
+            "magnitude",
+            "l0",
+        ]
         self.pruning_method = pruning_method
         self.mask_block_rows = mask_block_rows
         self.mask_block_cols = mask_block_cols
         AMPERE_METHODS = ["disabled", "annealing"]
         if ampere_pruning_method not in AMPERE_METHODS:
-            raise RuntimeError(f"Unknown ampere pruning method '{ampere_pruning_method}', should be in {AMPERE_METHODS}")
+            raise RuntimeError(
+                f"Unknown ampere pruning method '{ampere_pruning_method}', should be in {AMPERE_METHODS}"
+            )
         self.ampere_pruning_method = ampere_pruning_method
 
         SHUFFLING_METHODS = ["disabled", "annealing", "mask_annealing"]
         if shuffling_method not in SHUFFLING_METHODS:
-            raise RuntimeError(f"Unknown shuffle method '{shuffling_method}', should be in {SHUFFLING_METHODS}")
+            raise RuntimeError(
+                f"Unknown shuffle method '{shuffling_method}', should be in {SHUFFLING_METHODS}"
+            )
 
         self.shuffling_method = shuffling_method
         assert in_shuffling_group >= 1
@@ -429,23 +487,30 @@ class MaskedLinear(nn.Linear):
         self.mask_shuffler = None
 
         if self.shuffling_method == "annealing":
-            self.shuffler = DimensionShuffler(in_features=in_features,
-                                              out_features=out_features,
-                                              in_features_group=self.in_shuffling_group,
-                                              out_features_group=self.out_shuffling_group)
+            self.shuffler = DimensionShuffler(
+                in_features=in_features,
+                out_features=out_features,
+                in_features_group=self.in_shuffling_group,
+                out_features_group=self.out_shuffling_group,
+            )
         elif self.shuffling_method == "mask_annealing":
-            self.mask_shuffler = MaskDimensionShuffler(in_features=in_features,
-                                                       out_features=out_features,
-                                                       in_features_group=self.in_shuffling_group,
-                                                       out_features_group=self.out_shuffling_group)
+            self.mask_shuffler = MaskDimensionShuffler(
+                in_features=in_features,
+                out_features=out_features,
+                in_features_group=self.in_shuffling_group,
+                out_features_group=self.out_shuffling_group,
+            )
 
         if self.pruning_method in ["topK", "threshold", "sigmoied_threshold", "l0"]:
             self.mask_scale = mask_scale
             self.mask_init = mask_init
             size = self.weight.size()
-            assert(size[0] % self.mask_block_rows == 0)
-            assert(size[1] % self.mask_block_cols == 0)
-            mask_size = (size[0] // self.mask_block_rows, size[1] // self.mask_block_cols)
+            assert size[0] % self.mask_block_rows == 0
+            assert size[1] % self.mask_block_cols == 0
+            mask_size = (
+                size[0] // self.mask_block_rows,
+                size[1] // self.mask_block_cols,
+            )
             self.mask_scores = nn.Parameter(torch.Tensor(size=mask_size))
             self.init_mask()
 
@@ -456,22 +521,29 @@ class MaskedLinear(nn.Linear):
         else:
             self.register_parameter("ampere_permut_scores", None)
 
-
     def initialize_ampere_permut_scores(self):
-        """"We must remember that weights are used in transposed form for forward pass,
+        """ "We must remember that weights are used in transposed form for forward pass,
         which we want to optimize the most.
         So we make sure we are creating an Ampere sparse pattern on the right dimension -> 0"""
-        assert ((self.weight.shape[0] % AMPERE_M) == 0)
+        assert (self.weight.shape[0] % AMPERE_M) == 0
 
         sparse_patterns_count = ampere_pattern(None).shape[0]
         # Creating the pattern in a transposed way to avoid a few ops later
-        ampere_mask_size = (self.weight.shape[1], self.weight.shape[0] // AMPERE_M, sparse_patterns_count)
+        ampere_mask_size = (
+            self.weight.shape[1],
+            self.weight.shape[0] // AMPERE_M,
+            sparse_patterns_count,
+        )
         self.ampere_permut_scores = nn.Parameter(torch.Tensor(size=ampere_mask_size))
 
         if self.ampere_mask_init == "constant":
             init.constant_(self.ampere_permut_scores, val=self.ampere_mask_scale)
         elif self.ampere_mask_init == "uniform":
-            init.uniform_(self.ampere_permut_scores, a=-self.ampere_mask_scale, b=self.ampere_mask_scale)
+            init.uniform_(
+                self.ampere_permut_scores,
+                a=-self.ampere_mask_scale,
+                b=self.ampere_mask_scale,
+            )
         elif self.ampere_mask_init == "kaiming":
             init.kaiming_uniform_(self.ampere_permut_scores, a=math.sqrt(5))
 
@@ -490,10 +562,12 @@ class MaskedLinear(nn.Linear):
         return mask
 
     @staticmethod
-    def ampere_mask_(ampere_permut_scores,
-                     ampere_temperature: float,
-                     device:torch.DeviceObjType,
-                     training:bool):
+    def ampere_mask_(
+        ampere_permut_scores,
+        ampere_temperature: float,
+        device: torch.DeviceObjType,
+        training: bool,
+    ):
         if training:
             s = F.softmax(ampere_permut_scores * ampere_temperature, dim=-1)
         else:
@@ -511,16 +585,18 @@ class MaskedLinear(nn.Linear):
         return name.endswith(".ampere_permut_scores") or name.endswith(".mask_scores")
 
     @staticmethod
-    def mask_(weight,
-                       pruning_method,
-                       threshold,
-                       mask_scores,
-                       ampere_pruning_method,
-                       ampere_temperature,
-                       ampere_permut_scores,
-                       mask_block_rows,
-                       mask_block_cols,
-                       training):
+    def mask_(
+        weight,
+        pruning_method,
+        threshold,
+        mask_scores,
+        ampere_pruning_method,
+        ampere_temperature,
+        ampere_permut_scores,
+        mask_block_rows,
+        mask_block_cols,
+        training,
+    ):
         if pruning_method == "topK":
             mask = TopKBinarizer.apply(mask_scores, threshold)
         elif pruning_method in ["threshold", "sigmoied_threshold"]:
@@ -539,28 +615,31 @@ class MaskedLinear(nn.Linear):
             mask = s_bar.clamp(min=0.0, max=1.0)
         # Expand block mask to individual element mask
         if pruning_method != "magnitude":
-            mask = MaskedLinear.expand_mask_(mask,
-                                             mask_block_rows=mask_block_rows,
-                                             mask_block_cols=mask_block_cols
-                                             )
+            mask = MaskedLinear.expand_mask_(
+                mask, mask_block_rows=mask_block_rows, mask_block_cols=mask_block_cols
+            )
 
         if ampere_pruning_method != "disabled":
-            ampere_mask = MaskedLinear.ampere_mask_(ampere_permut_scores,
-                                                    ampere_temperature,
-                                                    device=mask.device,
-                                                    training=training)
+            ampere_mask = MaskedLinear.ampere_mask_(
+                ampere_permut_scores,
+                ampere_temperature,
+                device=mask.device,
+                training=training,
+            )
             mask = mask * ampere_mask
 
         return mask
 
     @staticmethod
-    def masked_weights_from_state_dict(state_dict,
-                                       weight_name,
-                                       pruning_method,
-                                       threshold,
-                                       ampere_pruning_method,
-                                       mask_block_rows,
-                                       mask_block_cols):
+    def masked_weights_from_state_dict(
+        state_dict,
+        weight_name,
+        pruning_method,
+        threshold,
+        ampere_pruning_method,
+        mask_block_rows,
+        mask_block_cols,
+    ):
         def name_for_mask(weight_name, mask_name):
             new_name = weight_name.split(".")[:-1] + [mask_name]
             new_name = ".".join(new_name)
@@ -568,21 +647,22 @@ class MaskedLinear(nn.Linear):
         parameters = {}
         for name in ["weight", "mask_scores", "ampere_permut_scores"]:
             parameters[name] = state_dict.get(name_for_mask(weight_name, name))
-            
-        ret = MaskedLinear.masked_weights(pruning_method=pruning_method,
-                                          threshold=threshold,
-                                          ampere_pruning_method=ampere_pruning_method,
-                                          ampere_temperature=0.0,
-                                          training=False,
-                                          mask_block_rows=mask_block_rows,
-                                          mask_block_cols=mask_block_cols,
-                                          **parameters)
-                                          
+
+        ret = MaskedLinear.masked_weights(
+            pruning_method=pruning_method,
+            threshold=threshold,
+            ampere_pruning_method=ampere_pruning_method,
+            ampere_temperature=0.0,
+            training=False,
+            mask_block_rows=mask_block_rows,
+            mask_block_cols=mask_block_cols,
+            **parameters,
+        )
+
         return ret
 
     def expand_mask(self, mask):
         return self.expand_mask_(mask, self.mask_block_rows, self.mask_block_cols)
-
 
     def forward(self, input: torch.tensor, current_config: dict):
         # Get the mask
@@ -590,19 +670,23 @@ class MaskedLinear(nn.Linear):
         ampere_temperature = current_config["ampere_temperature"]
         shuffle_temperature = current_config["shuffling_temperature"]
 
-        mask = self.mask_(self.weight,
-                          self.pruning_method,
-                          threshold,
-                          self.mask_scores,
-                          self.ampere_pruning_method,
-                          ampere_temperature,
-                          self.ampere_permut_scores,
-                          self.mask_block_rows,
-                          self.mask_block_cols,
-                          training=self.training)
+        mask = self.mask_(
+            self.weight,
+            self.pruning_method,
+            threshold,
+            self.mask_scores,
+            self.ampere_pruning_method,
+            ampere_temperature,
+            self.ampere_permut_scores,
+            self.mask_block_rows,
+            self.mask_block_cols,
+            training=self.training,
+        )
 
         if self.shuffler is not None:
-            return self.shuffler(input, self.weight, mask, shuffle_temperature) + self.bias
+            return (
+                self.shuffler(input, self.weight, mask, shuffle_temperature) + self.bias
+            )
         else:
             if self.mask_shuffler is not None:
                 mask = self.mask_shuffler(mask, shuffle_temperature)

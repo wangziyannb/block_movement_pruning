@@ -22,7 +22,6 @@ import os
 import shutil
 
 import torch
-
 from emmental.modules import MaskedLinear
 
 
@@ -32,6 +31,7 @@ def expand_mask(mask, args):
     mask = torch.repeat_interleave(mask, mask_block_rows, dim=0)
     mask = torch.repeat_interleave(mask, mask_block_cols, dim=1)
     return mask
+
 
 def main(args):
     pruning_method = args.pruning_method
@@ -57,13 +57,16 @@ def main(args):
             print(f"Copied layer {name}")
         else:
             if name.endswith(".weight"):
-                pruned_model[name] = MaskedLinear.masked_weights_from_state_dict(model, name, pruning_method, threshold, ampere_pruning_method)
+                pruned_model[name] = MaskedLinear.masked_weights_from_state_dict(
+                    model, name, pruning_method, threshold, ampere_pruning_method
+                )
             else:
-                assert(MaskedLinear.check_name(name))
+                assert MaskedLinear.check_name(name)
 
     if target_model_path is None:
         target_model_path = os.path.join(
-            os.path.dirname(model_name_or_path), f"bertarized_{os.path.basename(model_name_or_path)}"
+            os.path.dirname(model_name_or_path),
+            f"bertarized_{os.path.basename(model_name_or_path)}",
         )
 
     if not os.path.isdir(target_model_path):

@@ -21,7 +21,6 @@ import logging
 
 from transformers.configuration_utils import PretrainedConfig
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -85,4 +84,3 @@ class MaskedBertConfig(PretrainedConfig):
         self.shuffling_method = shuffling_method
         self.in_shuffling_group = in_shuffling_group
         self.out_shuffling_group = out_shuffling_group
-

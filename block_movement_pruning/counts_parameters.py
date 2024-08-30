@@ -19,8 +19,8 @@ import argparse
 import os
 
 import torch
-
 from emmental.modules import MaskedLinear
+
 
 def expand_mask(mask, args):
     mask_block_rows = args.mask_block_rows
@@ -36,7 +36,9 @@ def main(args):
     threshold = args.threshold
     ampere_pruning_method = args.ampere_pruning_method
 
-    st = torch.load(os.path.join(serialization_dir, "pytorch_model.bin"), map_location="cuda")
+    st = torch.load(
+        os.path.join(serialization_dir, "pytorch_model.bin"), map_location="cuda"
+    )
 
     remaining_count = 0  # Number of remaining (not pruned) params in the encoder
     encoder_count = 0  # Number of params in the encoder
@@ -47,20 +49,25 @@ def main(args):
             continue
 
         if name.endswith(".weight"):
-            weights = MaskedLinear.masked_weights_from_state_dict(st,
-                                                                  name,
-                                                                  pruning_method,
-                                                                  threshold,
-                                                                  ampere_pruning_method)
+            weights = MaskedLinear.masked_weights_from_state_dict(
+                st, name, pruning_method, threshold, ampere_pruning_method
+            )
             mask_ones = (weights != 0).sum().item()
-            print(name.ljust(60, " "), str(round(100 * mask_ones / param.numel(), 3)).ljust(20, " "), str(mask_ones))
+            print(
+                name.ljust(60, " "),
+                str(round(100 * mask_ones / param.numel(), 3)).ljust(20, " "),
+                str(mask_ones),
+            )
 
             remaining_count += mask_ones
         elif MaskedLinear.check_name(name):
             pass
         else:
             encoder_count += param.numel()
-            if name.endswith(".weight") and ".".join(name.split(".")[:-1] + ["mask_scores"]) in st:
+            if (
+                name.endswith(".weight")
+                and ".".join(name.split(".")[:-1] + ["mask_scores"]) in st
+            ):
                 pass
             else:
                 remaining_count += param.numel()

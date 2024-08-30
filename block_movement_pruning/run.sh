@@ -1,6 +1,4 @@
-
-
-python masked_run_squad.py --output_dir block_movement_pruning/output --overwrite_output_dir \
+CUDA_VISIBLE_DEVICES=3 python masked_run_squad.py --output_dir /data/zwang/block_movement_pruning/output --overwrite_output_dir \
                    --data_dir squad_data \
                    --train_file train-v1.1.json --predict_file dev-v1.1.json \
                    --do_train --do_eval \
@@ -26,7 +24,7 @@ python masked_run_squad.py --output_dir block_movement_pruning/output --overwrit
                    --mask_scale 0. \
                    --mask_block_rows 1 \
                    --mask_block_cols 1 \
-                    --threads 8 \
+                   --threads 8 \
                    --shuffling_method mask_annealing \
                    --initial_shuffling_temperature 0.1 \
                    --final_shuffling_temperature 20 \
