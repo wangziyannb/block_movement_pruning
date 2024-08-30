@@ -1,3 +1,11 @@
+### Need to use Python 3.7. Transformers 3.0.1 and tokenizers 0.8.0 have pre-compiled whl for Python 3.7.
+### Apex is needed to support distributed training and fp16 training for this codebase. Install via:
+```
+git clone https://github.com/NVIDIA/apex.git
+cd apex
+pip install -v --no-build-isolation --disable-pip-version-check --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./
+```
+
 # Movement Pruning: Adaptive Sparsity by Fine-Tuning
 
 *Magnitude pruning is a widely used strategy for reducing model size in pure supervised learning; however, it is less effective in the transfer learning regime that has become standard for state-of-the-art natural language processing applications. We propose the use of *movement pruning*, a simple, deterministic first-order weight pruning method that is more adaptive to pretrained model fine-tuning. Experiments show that when pruning large pretrained language models, movement pruning shows significant improvements in high-sparsity regimes. When combined with distillation, the approach achieves minimal accuracy loss with down to only 3% of the model parameters:*
