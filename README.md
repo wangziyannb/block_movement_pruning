@@ -11,6 +11,11 @@ git clone https://github.com/wangziyannb/block_movement_pruning.git
 cd block_movement_pruning
 pip install -r requirements.txt
 ```
+### Run squad task:
+```
+cd block_movement_pruning
+sh run.sh
+```
 # Movement Pruning: Adaptive Sparsity by Fine-Tuning
 
 *Magnitude pruning is a widely used strategy for reducing model size in pure supervised learning; however, it is less effective in the transfer learning regime that has become standard for state-of-the-art natural language processing applications. We propose the use of *movement pruning*, a simple, deterministic first-order weight pruning method that is more adaptive to pretrained model fine-tuning. Experiments show that when pruning large pretrained language models, movement pruning shows significant improvements in high-sparsity regimes. When combined with distillation, the approach achieves minimal accuracy loss with down to only 3% of the model parameters:*
